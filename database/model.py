@@ -1,3 +1,4 @@
+# PEÇA ESSENCIAL DO BACKEND -> CONEXÃO COM O BANCO DE DADOS
 import sqlalchemy as db
 from sqlalchemy import ForeignKey, Table, Column, Boolean, Integer, String, MetaData
 engine = db.create_engine("sqlite:///API-Tarefas.db")
