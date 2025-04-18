@@ -110,11 +110,11 @@ def rota_sign_in(headers, body):
         # Realiza a consulta no banco de dados
         user_query = select(user_table).where(user_table.c.username == username)
         result_user = connection.execute(user_query).fetchone()
-
         if result_user:
-            senha_hash = result_user['password_hash']  # Acessando com a chave
+            senha_hash = result_user[2]  # Acessando com a chave
+            print(senha_hash)
             resultado = verificar_senha(password, senha_hash)
-
+            print("FUNCIONOU!")
             if resultado:
                 response_data = {
                     "message": "Login bem-sucedido",
@@ -146,7 +146,6 @@ def rota_sign_up(headers, body):
         query = select(user_table).where(user_table.c.username == username)
         result = connection.execute(query).fetchone()
         
-
         if result:
             return servidor.http_response(409, "Conflict", "Usuário já existe")
         
