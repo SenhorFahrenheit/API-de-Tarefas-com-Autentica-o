@@ -5,10 +5,6 @@
 # - **Banco de Dados**: Armazenamento de usuários e tarefas em SQLite.
 # - **Validação**: Validação manual de dados utilizando `json.loads()`.
 
-# ## Rotas da API
-# - **POST /login**: Autenticação de usuários com envio de nome de usuário e senha. Retorna um token ou cookie.
-# - **GET /tarefas**: Retorna todas as tarefas do usuário autenticado.
-# - **POST /tarefas**: Cria uma nova tarefa para o usuário autenticado.
 
 import socket
 
@@ -22,11 +18,13 @@ class Server:
             'POST': {}
         }
     def add_route(self, method, path, handler):
+        print("Rota adicionada!")
         self.routes[method.upper()][path] =  handler
+        print(self.routes)
     
     def start(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((self.host, self.port))
         sock.listen(5)
 
@@ -45,24 +43,30 @@ class Server:
         try:
             lines = request.split('\r\n')
             request_line = lines[0]
-            method, path = request_line.split()
+            parts = request_line.split()
+            if len(parts) >= 2:
+                method = parts[0]
+                path = parts[1]
+            else:
+                return self.http_response(400, "Bad Request", "Linha de requisição inválida")
+
 
             headers = {}
             body = ""
 
-            index = lines.index('')
-            header_lines = lines[1:index]
-            body_lines = lines[index:1]
+              # Separa headers e body
+            empty_line_index = lines.index('')
+            header_lines = lines[1:empty_line_index]
+            body_lines = lines[empty_line_index + 1:]
 
-            for line in header_lines:
-                key, value = line.split(': ', 1)
-                headers[key.lower()] = value
+            body = "\n".join(body_lines)
 
-            if method.upper() == 'POST':
-                pass
-
-            if method.upper() == "GET":
-                pass
+            handler = self.routes.get(method.upper(), {}).get(path)
+            print(handler)
+            if handler:
+                return handler(headers, body)
+            else:
+                return self.http_response(404, "Not Found", "Rota não encontrada")
 
 
         except Exception as e:
@@ -76,4 +80,93 @@ class Server:
         f"Connection: close\r\n\r\n"
         f"{content}"
     )
-    
+
+
+# ## Rotas da API
+# - **POST /login**: Autenticação de usuários com envio de nome de usuário e senha. Retorna um token ou cookie.
+# - **GET /tarefas**: Retorna todas as tarefas do usuário autenticado.
+# - **POST /tarefas**: Cria uma nova tarefa para o usuário autenticado.
+
+
+
+# Cria o servidor e registra as rotas
+servidor = Server()
+# servidor.add_route("GET", "/", rota_html)               # Adiciona a rota GET /
+
+# - **POST /login**: Autenticação de usuários com envio de nome de usuário e senha. Retorna um token ou cookie.
+from server import servidor
+from database.model import user_table, connection
+from sqlalchemy import select, insert
+from utils.functions import gerar_hash, verificar_senha
+
+import json
+
+def rota_sign_in(headers, body):
+    try:
+        data = json.loads(body)
+        username = data.get("username")
+        password = data.get("password")
+
+        # Realiza a consulta no banco de dados
+        user_query = select(user_table).where(user_table.c.username == username)
+        result_user = connection.execute(user_query).fetchone()
+
+        if result_user:
+            senha_hash = result_user['password_hash']  # Acessando com a chave
+            resultado = verificar_senha(password, senha_hash)
+
+            if resultado:
+                response_data = {
+                    "message": "Login bem-sucedido",
+                    "token": "abc.def.ghi"  # Simulação de token
+                }
+                return servidor.http_response(200, "OK", json.dumps(response_data), content_type="application/json")
+            else:
+                return servidor.http_response(401, "Unauthorized", "Usuário ou senha incorretos.")
+        else:
+            return servidor.http_response(401, "Unauthorized", "Usuário não encontrado.")
+
+    except json.JSONDecodeError:
+        return servidor.http_response(400, "Bad Request", "JSON inválido")
+    except Exception as e:
+        return servidor.http_response(500, "Internal Server Error", f"Erro no servidor: {str(e)}")
+
+
+def rota_sign_up(headers, body):
+    print(json.loads(body))
+    try:
+        data = json.loads(body)
+        username = data.get("username")
+        password = data.get("password")
+        print(username)
+        print(password)
+        if not username or not password:
+            return servidor.http_response(400, "Bad Request", "Usuário e senha são obrigatórios")
+
+        query = select(user_table).where(user_table.c.username == username)
+        result = connection.execute(query).fetchone()
+        
+
+        if result:
+            return servidor.http_response(409, "Conflict", "Usuário já existe")
+        
+        password = gerar_hash(password)
+
+        insert_query = insert(user_table).values(username=username, password_hash=password)
+        connection.execute(insert_query)
+        connection.commit()
+
+        return servidor.http_response(201, "Created", "Usuário cadastrado com sucesso")
+
+    except json.JSONDecodeError:
+        return servidor.http_response(400, "Bad Request", "JSON inválido")
+
+      
+servidor.add_route("POST", "/sign_in", rota_sign_in)
+servidor.add_route("POST", "/sign_up", rota_sign_up)
+
+
+
+# Inicia o servidor
+if __name__ == "__main__":
+    servidor.start()

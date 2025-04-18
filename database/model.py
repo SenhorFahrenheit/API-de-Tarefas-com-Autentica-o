@@ -25,3 +25,4 @@ tasks_table = Table(
 )
 
 metadata_obj.create_all(engine)
+
