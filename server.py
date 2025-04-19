@@ -95,7 +95,7 @@ servidor = Server()
 
 # - **POST /login**: Autenticação de usuários com envio de nome de usuário e senha. Retorna um token ou cookie.
 from server import servidor
-from database.model import user_table, connection
+from database.model import user_table, tasks_table, connection
 from sqlalchemy import select, insert
 from utils.functions import gerar_hash, verificar_senha
 
@@ -114,7 +114,6 @@ def rota_sign_in(headers, body):
             senha_hash = result_user[2]  # Acessando com a chave
             print(senha_hash)
             resultado = verificar_senha(password, senha_hash)
-            print("FUNCIONOU!")
             if resultado:
                 response_data = {
                     "message": "Login bem-sucedido",
@@ -160,7 +159,53 @@ def rota_sign_up(headers, body):
     except json.JSONDecodeError:
         return servidor.http_response(400, "Bad Request", "JSON inválido")
 
-      
+def get_tasks():
+    pass
+
+def add_tasks(headers, body):
+    try:
+        # Converte o corpo da requisição para um dicionário Python
+        data = json.loads(body)
+        
+        # Extraímos os valores necessários do corpo
+        title = data.get("title")
+        description = data.get("description", "")
+        done = data.get("done", False)
+        user_id = data.get("user_id")
+        
+        # Validação simples: título não pode ser vazio
+        if not title:
+            return servidor.http_response(400, "Bad Request", "O título da tarefa não pode ser vazio.")
+        
+        # Prepara o dicionário de tarefa para inserção
+        tarefa = {
+            "title": title,
+            "description": description,
+            "done": done,
+            "user_id": user_id
+        }
+
+        # Insere a tarefa no banco de dados
+        insert_tasks = insert(tasks_table).values(
+            title=tarefa["title"],
+            description=tarefa["description"],
+            done=tarefa["done"],
+            user_id=tarefa["user_id"]
+        )
+        connection.execute(insert_tasks)
+        connection.commit()
+
+        # Responde com sucesso
+        return servidor.http_response(201, "Created", "Tarefa adicionada com sucesso", content_type="application/json")
+    
+    except json.JSONDecodeError:
+        return servidor.http_response(400, "Bad Request", "JSON inválido")
+    except Exception as e:
+        return servidor.http_response(500, "Internal Server Error", f"Erro no servidor: {str(e)}")
+
+
+
+servidor.add_route("POST", "/add_tasks", add_tasks)
 servidor.add_route("POST", "/sign_in", rota_sign_in)
 servidor.add_route("POST", "/sign_up", rota_sign_up)
 
