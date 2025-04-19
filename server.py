@@ -159,8 +159,35 @@ def rota_sign_up(headers, body):
     except json.JSONDecodeError:
         return servidor.http_response(400, "Bad Request", "JSON inválido")
 
-def get_tasks():
-    pass
+def get_tasks(headers, body):
+    try:
+        data = json.loads(body)
+
+        user_id = data.get("user_id")
+
+        if not user_id:
+            return servidor.http_response(400, "Bad Request", "O id do usuário não pode ser vazio")
+        
+        query = select(tasks_table).where(tasks_table.c.user_id == user_id)
+        resultado = connection.execute(query).fetchall()
+
+         # Transforma o resultado em uma lista de dicionários
+        tarefas = [
+            {
+                "id": row.id,
+                "titulo": row.title,
+                "descricao": row.description,
+                "status": row.done,
+                "user_id": row.user_id
+            }
+            for row in resultado
+        ]
+
+        return servidor.http_response(200, "OK", json.dumps(tarefas))
+    except json.JSONDecodeError:
+        return servidor.http_response(400, "Bad Request", "JSON inválido")
+    except Exception as e:
+        return servidor.http_response(500, "Internal Server Error", f"Erro no servidor: {str(e)}")
 
 def add_tasks(headers, body):
     try:
@@ -208,6 +235,7 @@ def add_tasks(headers, body):
 servidor.add_route("POST", "/add_tasks", add_tasks)
 servidor.add_route("POST", "/sign_in", rota_sign_in)
 servidor.add_route("POST", "/sign_up", rota_sign_up)
+servidor.add_route("GET", "/get_tasks", get_tasks)
 
 
 
