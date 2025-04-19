@@ -1,78 +1,78 @@
-## Funcionalidades
-# - **Login**: Endpoint de login que gera um token ou cookie para autenticação.
-# - **Manipulação de Tarefas**: Usuários podem criar e visualizar suas tarefas.
-# - **Autenticação**: Implementação de middleware que verifica se o usuário está autenticado antes de permitir acesso às rotas protegidas.
-# - **Banco de Dados**: Armazenamento de usuários e tarefas em SQLite.
-# - **Validação**: Validação manual de dados utilizando `json.loads()`.
-
-
 import socket
 
-
+# Definição da classe Server
 class Server:
     def __init__(self, host='localhost', port=8080):
+        # Inicialização do servidor com host e porta definidos
         self.host = host
         self.port = port
         self.routes = {
             'GET': {},
             'POST': {}
         }
+    
     def add_route(self, method, path, handler):
+        # Método para adicionar uma rota de requisição ao servidor
         print("Rota adicionada!")
-        self.routes[method.upper()][path] =  handler
+        self.routes[method.upper()][path] = handler  # Associa um handler a uma rota
         print(self.routes)
     
     def start(self):
+        # Método para iniciar o servidor e começar a ouvir requisições
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((self.host, self.port))
-        sock.listen(5)
+        sock.bind((self.host, self.port))  # Associa o servidor ao host e porta
+        sock.listen(5)  # Permite até 5 conexões simultâneas
 
         print(f"[INICIANDO API] Servidor rodando em {self.host}: {self.port}")
 
         while True:
-            client, adress = sock.accept()
-            request = client.recv(5000).decode()
+            # Aguarda por requisições de clientes
+            client, address = sock.accept()
+            request = client.recv(5000).decode()  # Lê a requisição do cliente
 
             if request:
                 print("Requisição Recebida")
-                response = self.handle_request(request)
-                client.sendall(response.encode('utf-8'))
+                response = self.handle_request(request)  # Processa a requisição
+                client.sendall(response.encode('utf-8'))  # Envia a resposta para o cliente
                 client.close()
+    
     def handle_request(self, request):
+        # Método que lida com a requisição recebida
         try:
-            lines = request.split('\r\n')
+            lines = request.split('\r\n')  # Divide a requisição em linhas
             request_line = lines[0]
-            parts = request_line.split()
+            parts = request_line.split()  # Separa a linha de requisição em partes
+
             if len(parts) >= 2:
-                method = parts[0]
-                path = parts[1]
+                method = parts[0]  # Método HTTP (GET, POST, etc.)
+                path = parts[1]  # Caminho da URL
             else:
                 return self.http_response(400, "Bad Request", "Linha de requisição inválida")
-
 
             headers = {}
             body = ""
 
-              # Separa headers e body
+            # Separa os headers e o corpo da requisição
             empty_line_index = lines.index('')
             header_lines = lines[1:empty_line_index]
             body_lines = lines[empty_line_index + 1:]
-
             body = "\n".join(body_lines)
 
+            # Verifica se existe um handler para o método e caminho solicitados
             handler = self.routes.get(method.upper(), {}).get(path)
             print(handler)
             if handler:
-                return handler(headers, body)
+                return handler(headers, body)  # Chama o handler correspondente
             else:
                 return self.http_response(404, "Not Found", "Rota não encontrada")
 
-
         except Exception as e:
+            # Caso ocorra algum erro, retorna uma resposta de erro
             return self.http_response(500, "Erro Interno", f"Erro: {e}")
         
     def http_response(self, status_code, status_text, content, content_type='text/html'):
+        # Método para gerar uma resposta HTTP formatada
         return (
         f"HTTP/1.1 {status_code} {status_text}\r\n"
         f"Content-Type: {content_type}; charset=utf-8\r\n"
@@ -81,43 +81,36 @@ class Server:
         f"{content}"
     )
 
-
 # ## Rotas da API
-# - **POST /login**: Autenticação de usuários com envio de nome de usuário e senha. Retorna um token ou cookie.
-# - **GET /tarefas**: Retorna todas as tarefas do usuário autenticado.
-# - **POST /tarefas**: Cria uma nova tarefa para o usuário autenticado.
-
-
+# Definem os endpoints de autenticação e gerenciamento de tarefas.
 
 # Cria o servidor e registra as rotas
 servidor = Server()
-# servidor.add_route("GET", "/", rota_html)               # Adiciona a rota GET /
 
-# - **POST /login**: Autenticação de usuários com envio de nome de usuário e senha. Retorna um token ou cookie.
+# Importa módulos necessários para as funções de autenticação e tarefas
 from server import servidor
 from database.model import user_table, tasks_table, connection
 from sqlalchemy import select, insert
 from utils.functions import gerar_hash, verificar_senha
-
 import json
 
+# Função para realizar o login (POST /sign_in)
 def rota_sign_in(headers, body):
     try:
-        data = json.loads(body)
+        data = json.loads(body)  # Converte o corpo da requisição para dicionário
         username = data.get("username")
         password = data.get("password")
 
-        # Realiza a consulta no banco de dados
+        # Realiza consulta no banco de dados para verificar o usuário
         user_query = select(user_table).where(user_table.c.username == username)
         result_user = connection.execute(user_query).fetchone()
         if result_user:
-            senha_hash = result_user[2]  # Acessando com a chave
-            print(senha_hash)
-            resultado = verificar_senha(password, senha_hash)
+            senha_hash = result_user[2]  # Recupera o hash da senha do usuário
+            resultado = verificar_senha(password, senha_hash)  # Verifica se a senha está correta
             if resultado:
                 response_data = {
                     "message": "Login bem-sucedido",
-                    "token": "abc.def.ghi"  # Simulação de token
+                    "token": "abc.def.ghi"  # Simulação de um token JWT
                 }
                 return servidor.http_response(200, "OK", json.dumps(response_data), content_type="application/json")
             else:
@@ -130,15 +123,12 @@ def rota_sign_in(headers, body):
     except Exception as e:
         return servidor.http_response(500, "Internal Server Error", f"Erro no servidor: {str(e)}")
 
-
+# Função para realizar o cadastro de usuário (POST /sign_up)
 def rota_sign_up(headers, body):
-    print(json.loads(body))
     try:
-        data = json.loads(body)
+        data = json.loads(body)  # Converte o corpo da requisição para dicionário
         username = data.get("username")
         password = data.get("password")
-        print(username)
-        print(password)
         if not username or not password:
             return servidor.http_response(400, "Bad Request", "Usuário e senha são obrigatórios")
 
@@ -148,7 +138,7 @@ def rota_sign_up(headers, body):
         if result:
             return servidor.http_response(409, "Conflict", "Usuário já existe")
         
-        password = gerar_hash(password)
+        password = gerar_hash(password)  # Gera o hash da senha
 
         insert_query = insert(user_table).values(username=username, password_hash=password)
         connection.execute(insert_query)
@@ -159,19 +149,19 @@ def rota_sign_up(headers, body):
     except json.JSONDecodeError:
         return servidor.http_response(400, "Bad Request", "JSON inválido")
 
+# Função para obter tarefas (GET /get_tasks)
 def get_tasks(headers, body):
     try:
-        data = json.loads(body)
+        data = json.loads(body)  # Converte o corpo da requisição para dicionário
 
-        user_id = data.get("user_id")
-
+        user_id = data.get("user_id")  # Obtém o ID do usuário
         if not user_id:
             return servidor.http_response(400, "Bad Request", "O id do usuário não pode ser vazio")
         
         query = select(tasks_table).where(tasks_table.c.user_id == user_id)
         resultado = connection.execute(query).fetchall()
 
-         # Transforma o resultado em uma lista de dicionários
+        # Transforma o resultado em uma lista de dicionários
         tarefas = [
             {
                 "id": row.id,
@@ -189,22 +179,21 @@ def get_tasks(headers, body):
     except Exception as e:
         return servidor.http_response(500, "Internal Server Error", f"Erro no servidor: {str(e)}")
 
+# Função para adicionar tarefas (POST /add_tasks)
 def add_tasks(headers, body):
     try:
-        # Converte o corpo da requisição para um dicionário Python
-        data = json.loads(body)
+        data = json.loads(body)  # Converte o corpo da requisição para dicionário
         
-        # Extraímos os valores necessários do corpo
+        # Extrai valores necessários
         title = data.get("title")
         description = data.get("description", "")
         done = data.get("done", False)
         user_id = data.get("user_id")
         
-        # Validação simples: título não pode ser vazio
         if not title:
             return servidor.http_response(400, "Bad Request", "O título da tarefa não pode ser vazio.")
         
-        # Prepara o dicionário de tarefa para inserção
+        # Prepara os dados para inserção no banco
         tarefa = {
             "title": title,
             "description": description,
@@ -230,14 +219,11 @@ def add_tasks(headers, body):
     except Exception as e:
         return servidor.http_response(500, "Internal Server Error", f"Erro no servidor: {str(e)}")
 
-
-
+# Registro das rotas no servidor
 servidor.add_route("POST", "/add_tasks", add_tasks)
 servidor.add_route("POST", "/sign_in", rota_sign_in)
 servidor.add_route("POST", "/sign_up", rota_sign_up)
 servidor.add_route("GET", "/get_tasks", get_tasks)
-
-
 
 # Inicia o servidor
 if __name__ == "__main__":
